@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - '8000:8000'
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./backend:/app
+      - ./core:/app/core
+      - ./data:/data
+    depends_on:
+      - sandbox
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  sandbox:
+    build:
+      context: ./sandbox
+      dockerfile: Dockerfile
+    ports:
+      - '9000:9000'
+    volumes:
+      - ./sandbox:/app
+      - ./data:/data
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+
+networks:
+  default:
+    name: sovereign-ai-network
+
