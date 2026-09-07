@@ -1,0 +1,48 @@
+# SovereignAI Workbench — Security Policy configuration (Phase 6).
+#
+# This file configures the centralized PolicyEngine. It is loaded at startup
+# (see core.security.policy_engine.init_policy_engine) and merged over the
+# engine's SECURE DEFAULTS, so any action not listed here keeps its default
+# decision. The default for unknown/dangerous actions is DENY.
+#
+# Conventions:
+#   * default  — the decision for any capability/action not explicitly listed.
+#                Secure default is DENY (deny unknown actions).
+#   * Each top-level key is a *capability* (file_system, document_generation,
+#     knowledge, vision, code_execution), NOT a model or provider.
+#   * Each value maps an *action* to a decision: ALLOW, DENY, or
+#     REQUIRE_APPROVAL.
+#
+# Existing legitimate workflows are ALLOW by default:
+#   * file read/write/list inside the configured Workspace (path boundaries are
+#     enforced by core.tools.workspace.Workspace — this policy layer only gates
+#     whether a tool may run at all).
+#   * document generation, RAG knowledge-base search, vision/OCR analysis.
+#
+# Dangerous capabilities are DENY by default. Code execution (the sandbox) is
+# the clearest example: it runs user-supplied code in a container, so it is
+# locked down unless a system administrator explicitly opts in.
+#
+# To change a decision, uncomment/edit the relevant line below. Example:
+#   file_system:
+#     write_file: REQUIRE_APPROVAL   # require a human to review writes
+
+default: DENY
+
+file_system:
+  list_files: ALLOW
+  read_file: ALLOW
+  write_file: ALLOW
+
+document_generation:
+  create_document: ALLOW
+
+knowledge:
+  search_knowledge_base: ALLOW
+
+vision:
+  ocr_image: ALLOW
+  analyze_image: ALLOW
+
+code_execution:
+  execute_code: DENY
