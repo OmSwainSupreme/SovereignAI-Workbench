@@ -1,0 +1,46 @@
+# SovereignAI Workbench — Local RAG / Knowledge Base configuration.
+#
+# This file declares the configuration the local RAG subsystem reads at
+# startup. It is intentionally separate from the model routing config
+# (``models.yaml``) so the two layers can be tuned independently.
+#
+# Conventions:
+#   * knowledge_workspace_dir — directory the KB ingests from. Resolved
+#     relative to the project root if not absolute. The KB enforces the
+#     same controlled-workspace security as the file tools: the path
+#     must not escape the configured root, and traversal segments
+#     (``..``), absolute paths, and symlink escapes are rejected.
+#   * chunk_size              — maximum number of characters per chunk.
+#   * overlap                 — number of characters shared between
+#     consecutive chunks. Must be strictly less than ``chunk_size``.
+#   * top_k                   — default number of results returned by a
+#     search. May be overridden by callers.
+#   * min_score               — default minimum cosine similarity
+#     threshold (0.0–1.0). Results below this are filtered.
+#   * embedding_provider      — name of the embedding provider backend.
+#       * ``fake`` — deterministic pseudo-embeddings for testing
+#         and development on resource-constrained hardware. NOT
+#         semantically meaningful.
+#       * ``hash`` — bag-of-words hashing, also local and fast. Better
+#         than fake but still not a true semantic model.
+#   * embedding_dimension     — vector size produced by the provider.
+#     Must match between provider and storage.
+#   * max_file_bytes          — refuse to ingest files larger than this
+#     (default 10 MiB, matching the file tool limit).
+#
+# This file is loaded by ``core.rag.config.load_rag_config()`` and handed
+# to a :class:`KnowledgeBase` factory. It is local-only and explicit.
+# No secrets, no API keys, no remote endpoints.
+
+knowledge_workspace_dir: data/knowledge
+
+chunk_size: 500
+overlap: 50
+
+top_k: 5
+min_score: 0.0
+
+embedding_provider: fake
+embedding_dimension: 128
+
+max_file_bytes: 10485760
