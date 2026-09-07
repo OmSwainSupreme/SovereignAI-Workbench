@@ -1,0 +1,82 @@
+# SovereignAI Workbench — Model routing configuration (Phase 3).
+#
+# This file declares the logical models the Model Router may consider.
+# The router itself does not read this file directly; it is loaded by
+# core.routing.registry.load_registry_from_path() and handed to a
+# ModelRouter instance.
+#
+# Conventions:
+#   * logical_name      — stable router-facing identifier
+#   * provider          — must match a registered provider in core.llm.registry
+#   * provider_model    — the provider-specific model identifier
+#   * capabilities      — set of Capability values (see core.routing.types)
+#   * input_modalities  — set of Modality values
+#   * enabled           — false means the router will never select this model
+#   * priority          — higher wins on ties; tie-breaks fall back to
+#                         lexicographic order of logical_name
+#   * context_length    — optional metadata for future context-aware routing
+#   * description       — free-form, for diagnostics and UI display
+#
+# Add new models here; do not add them to Python source.
+
+models:
+  - logical_name: general
+    provider: ollama
+    provider_model: qwen3:4b
+    capabilities:
+      - general
+      - reasoning
+      - document_analysis
+    input_modalities:
+      - text
+    output_modalities:
+      - text
+    enabled: true
+    priority: 10
+    context_length: 32768
+    description: General-purpose chat and reasoning model.
+
+  - logical_name: coding
+    provider: ollama
+    provider_model: qwen2.5-coder:3b
+    capabilities:
+      - coding
+      - general
+    input_modalities:
+      - text
+    output_modalities:
+      - text
+    enabled: true
+    priority: 20
+    context_length: 32768
+    description: Code generation, explanation, and refactoring.
+
+  - logical_name: vision
+    provider: ollama
+    provider_model: qwen2.5vl:3b
+    capabilities:
+      - vision
+      - general
+    input_modalities:
+      - text
+      - image
+    output_modalities:
+      - text
+    enabled: true
+    priority: 20
+    context_length: 32768
+    description: Image and visual understanding (captioning, classification).
+
+  - logical_name: disabled-legacy
+    provider: ollama
+    provider_model: mistral:7b
+    capabilities:
+      - general
+    input_modalities:
+      - text
+    output_modalities:
+      - text
+    enabled: false
+    priority: 0
+    context_length: 8192
+    description: Legacy model; disabled and never selected by the router.
