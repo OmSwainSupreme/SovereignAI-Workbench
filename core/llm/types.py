@@ -57,6 +57,12 @@ class GenerationRequest:
     top_p: Optional[float] = None
     max_tokens: Optional[int] = None
     stop: Optional[list[str]] = None
+    num_ctx: Optional[int] = None
+    keep_alive: Optional[str] = None
+    # When set to False, disables extended thinking mode on models that support it
+    # (e.g. qwen3). This prevents the model spending all its token budget on
+    # internal reasoning without generating a visible answer.
+    think: Optional[bool] = None
 
 
 @dataclass
@@ -75,9 +81,11 @@ class GenerationResponse:
 class StreamChunk:
     """A single chunk of a streaming response."""
 
-    content: str
-    model: str
+    content: str = ""
+    model: str = ""
     done: bool = False
+    is_thinking: bool = False
+    thinking: str = ""
 
 
 @dataclass

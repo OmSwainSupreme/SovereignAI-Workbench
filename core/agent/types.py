@@ -31,6 +31,7 @@ class ExecutionPhase(str, Enum):
     UNDERSTAND = "understand"
     PLAN = "plan"
     ROUTE_MODEL = "route_model"
+    GENERATE_RESPONSE = "generate_response"
     DECIDE_ACTION = "decide_action"
     TOOL_REQUEST = "tool_request"
     TOOL_EXECUTION = "tool_execution"
@@ -151,6 +152,7 @@ class AgentMessage:
 
     role: str  # "user" | "assistant" | "system" | "tool"
     content: str
+    thinking: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +230,10 @@ class AgentState:
 
     task_id: str
     task: str
+    attachments: list[str] = field(default_factory=list)
+    """Workspace-relative attachment names the task references (validated by the
+    application layer, never raw host paths). The planner uses these so tool
+    calls like ``read_file`` receive the correct workspace path."""
     status: AgentStatus = AgentStatus.PENDING
     current_phase: ExecutionPhase = ExecutionPhase.START
     messages: list[AgentMessage] = field(default_factory=list)
