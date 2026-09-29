@@ -32,16 +32,15 @@ models:
     output_modalities:
       - text
     enabled: true
-    priority: 10
+    priority: 25
     context_length: 32768
-    description: General-purpose chat and reasoning model.
+    description: General-purpose chat, reasoning, and document analysis model.
 
   - logical_name: coding
     provider: ollama
     provider_model: qwen2.5-coder:3b
     capabilities:
       - coding
-      - general
     input_modalities:
       - text
     output_modalities:
@@ -56,7 +55,6 @@ models:
     provider_model: qwen2.5vl:3b
     capabilities:
       - vision
-      - general
     input_modalities:
       - text
       - image

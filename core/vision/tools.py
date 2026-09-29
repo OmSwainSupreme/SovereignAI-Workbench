@@ -19,6 +19,7 @@ The tools:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Mapping, Optional
 
@@ -133,8 +134,8 @@ def _ocr_image_callable(
         # Load via the workspace; raises WorkspaceError for bad paths.
         image = image_loader.load(path)
 
-        # Run OCR.
-        result = ocr_provider.recognize(image)
+        # Run OCR in worker thread so event loop is not blocked.
+        result = await asyncio.to_thread(ocr_provider.recognize, image)
 
         # Convert to a plain serialisable dict for the agent.
         return {
@@ -177,8 +178,8 @@ def _analyze_image_callable(
         # Load via the workspace.
         image = image_loader.load(path)
 
-        # Run analysis.
-        result = vision_provider.analyze(image, prompt)
+        # Run analysis in worker thread so event loop is not blocked.
+        result = await asyncio.to_thread(vision_provider.analyze, image, prompt)
 
         return {
             "image_id": result.image_id,

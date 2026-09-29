@@ -84,7 +84,7 @@ class OllamaVisionProvider(VisionProvider):
         *,
         base_url: str = "http://127.0.0.1:11434",
         default_model: str = "",
-        request_timeout_seconds: int = 120,
+        request_timeout_seconds: int = 300,
     ) -> None:
         self._base_url = _validate_loopback(base_url)
         self._default_model = default_model
@@ -144,6 +144,7 @@ class OllamaVisionProvider(VisionProvider):
             "prompt": instruction,
             "images": [base64.b64encode(image.bytes).decode("utf-8")],
             "stream": False,
+            "options": {"num_ctx": 4096, "num_predict": 1024},
         }
 
         start = time.monotonic()
@@ -208,7 +209,7 @@ class OllamaVisionProvider(VisionProvider):
             response = self._client.post(
                 self._url(path),
                 json=payload,
-                timeout=timeout,
+                timeout=timeout or self._timeout_seconds,
             )
         except httpx.ConnectError as exc:
             raise ProviderUnavailableError(
