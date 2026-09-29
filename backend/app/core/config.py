@@ -126,13 +126,61 @@ class Settings(BaseSettings):
     )
 
     llm_ollama_request_timeout_seconds: int = Field(
-        default=120,
+        default=1800,
         ge=1,
         validation_alias=AliasChoices(
             "llm_ollama_request_timeout_seconds",
             "LLM__OLLAMA__REQUEST_TIMEOUT_SECONDS",
         ),
         description="HTTP request timeout in seconds for Ollama calls.",
+    )
+
+    # --- Workspace -------------------------------------------------------
+
+    workspace_path: str = Field(
+        default="workspace",
+        validation_alias=AliasChoices("workspace_path", "WORKSPACE_PATH"),
+        description=(
+            "Root directory for agent file/document tool operations. "
+            "Relative paths resolve from the process working directory."
+        ),
+    )
+
+    # --- Agent runtime (safety limits) -----------------------------------
+
+    agent_max_iterations: int = Field(
+        default=10,
+        ge=1,
+        validation_alias=AliasChoices("agent_max_iterations", "AGENT__MAX_ITERATIONS"),
+        description="Maximum number of main loop iterations for an agent run.",
+    )
+
+    agent_max_tool_calls: int = Field(
+        default=30,
+        ge=1,
+        validation_alias=AliasChoices("agent_max_tool_calls", "AGENT__MAX_TOOL_CALLS"),
+        description="Maximum number of tool calls allowed in a single agent run.",
+    )
+
+    agent_max_repetitive_tool_calls: int = Field(
+        default=3,
+        ge=1,
+        validation_alias=AliasChoices(
+            "agent_max_repetitive_tool_calls", "AGENT__MAX_REPETITIVE_TOOL_CALLS"
+        ),
+        description=(
+            "Maximum consecutive repetitions of the same tool with identical "
+            "arguments before the agent aborts."
+        ),
+    )
+
+    agent_execution_timeout_seconds: float = Field(
+        default=1800.0,
+        gt=0,
+        validation_alias=AliasChoices(
+            "agent_execution_timeout_seconds", "AGENT__EXECUTION_TIMEOUT_SECONDS"
+        ),
+        description="Wall-clock timeout in seconds for an entire agent run.",
     )
 
     # --- Configuration ---------------------------------------------------
