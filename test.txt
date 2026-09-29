@@ -1,0 +1,94 @@
+CYBER SECURITY DOMAINS
+
+1. Network Security
+- Network security protects networks and the data they carry from unauthorized access, misuse, and cyberattacks. It ensures systems remain confidential, available, and trustworthy across all digital environments.
+- Firewalls work as traffic cops because they examine each car to determine whether it can pass through.
+- Intrusion detection system is like security cameras on the highway observing for suspicious or unlawful activity. If they witness something unlawful, they inform the guards to apprehend and prevent it.
+
+2. Information Security
+- Information security is much more than merely protecting the network; it is about protecting valuable information like passwords, bank statements, personal documents, and secret recipes.
+- Information security means protecting important information from unauthorized people.
+
+3. Cloud Security
+- Most information is saved on the internet in a cloud. Cloud security ensures that this data is safeguarded from hackers and related risks.
+- It also ensures that firms hosting data adhere to rules and standards so they do not breach privacy.
+
+4. Application Security
+- Application security embeds multiple layers of protection in software and services to shield them from dangers.
+- It means protecting the application an organization creates, implements, and runs.
+- It prevents unauthorized access or modification of application resources.
+- It includes secure application architecture, input validation, threat analysis, and secure coding.
+- Subcategories include API security, S-SDLC, security QA, security UX, and source code scan.
+
+5. Risk Assessment
+- Risk assessment is a detailed examination for recognizing cases or activities that may damage assets, people, and systems.
+- Determining risks likely to cause damage or harm is known as hazard identification.
+- Risk assessment and risk analysis assess and analyze risks related to hazards and risk factors.
+- Risk control identifies effective means of avoiding or minimizing risks and hazards.
+- Subdomains include asset inventory, penetration tests, risk monitoring services, and vulnerability scans.
+
+6. Enterprise Risk Management
+- ERM stands for Enterprise Risk Management. It is a technique unique to an organization that focuses on risk related to finance, operations, and organizational objectives.
+
+7. IT Governance Risk & Compliance
+- Cybersecurity governance provides a framework for establishing risk tolerance, reporting structures, and choices. It involves decisions for executing security policies.
+- Governance focuses on realizing the organization's vision and mission and managing risks at a reasonable cost.
+- Four governance subdomains are laws and regulations, executive management involvement, company written policies, and executive governance.
+
+8. Threat Intelligence
+- Cyber threat intelligence (CTI) is the collection of information from various sources concerning current or potential threats to an organization.
+- CTI gathers and processes information to reduce and prevent cyber threats. It can be used with other cybersecurity tools. Threat intelligence can be external or internal.
+
+9. End-user Education
+- End-user education helps employees become aware and gain skills and tools to prevent data attacks or data loss.
+- Employees can self-educate by learning topics such as information security or InfoSec.
+
+10. Incident Response
+- Cyber-crimes can occur despite security measures.
+- Incident response involves having a plan, recognizing what went wrong, correcting it, and ensuring the same mistake is not repeated.
+
+11. Cryptography
+- Cryptography uses a secret code to ensure information safety. Information is distorted into an unreadable message that only a person with the correct decryption code can decipher.
+
+12. Frameworks & Standards
+- Cybersecurity risk management activities address cybersecurity frameworks and standards, making it possible to state and control risk appetite.
+- Examples include the NIST Cybersecurity Framework, Australian Signals Directorate (ASD) Essential Eight, and CIS (Center for Internet Security) Controls.
+
+13. Security Operations
+- Security operations deal with activities involving the actual implementation of security measures.
+- They include resource protection, disaster response, incident handling, physical security management, investigations, logging, and monitoring.
+
+14. Physical Security
+- Physical security safeguards individuals, resources, and tangible items against situations that may cause harm or loss.
+- Cybersecurity teams must coordinate to protect digital and physical resources.
+- Physical security is becoming more complex because of emerging technologies such as the Internet of Things and artificial intelligence.
+
+15. Career Development
+- Organizations increasingly require skilled and qualified cybersecurity personnel.
+- Cybersecurity career advancement involves certification, conferences, groups, self-learning, training, and similar activities.
+- Learners can study information security, risk analysis, or Ethical Hacking Certification Training.
+
+16. Security Architecture
+- Security architecture is a security concept where security aspects of a condition or environment are dealt with in a single solution.
+- It defines who and when to apply security controls.
+- The process is normally repeatable, with documented design principles and detailed security control specifications.
+
+17. Endpoint Security
+- Any device that connects to the internet, such as computers, phones, and tablets, is an endpoint.
+- Endpoint security protects these devices against malware, phishing, and unauthorized access.
+- It is like every gadget having a bodyguard to keep it safe.
+
+18. Identity and Access Management
+- IAM is like a secure building where only certain individuals can access specific rooms using key cards.
+- In the digital world, IAM ensures that certain information and systems are accessible only to authorized personnel.
+- For example, only you should be able to open your Email or Bank account. IAM protects information and discourages intrusion.
+
+19. Security Awareness and Training
+- Cybersecurity awareness and training help people understand threats and how they can be prevented.
+- Topics include recognizing phishing emails, avoiding weak passwords, and knowing what not to click or download.
+- Cybersecurity courses are useful for creating awareness.
+
+20. Mobile Security
+- Smartphones are mini computers containing a lot of data. Mobile security protects them against malware, unauthorized access, and loss of vital information.
+- It is like having a small fortress around the phone so only you can open it and see what is inside.
+- Mobile security includes activities such as updating, using passwords, and being cautious about applications downloaded to the phone.
