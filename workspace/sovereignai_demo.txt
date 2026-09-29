@@ -1,0 +1,17 @@
+SovereignAI Workbench — Demo File
+
+Project: SovereignAI Workbench
+Purpose: Local-first, privacy-preserving AI agent workbench.
+
+Key capabilities:
+1. Local model routing through Ollama.
+2. Secure workspace file operations.
+3. Knowledge-base retrieval.
+4. Vision and OCR processing.
+5. Isolated Docker code execution.
+6. Policy-controlled agent actions.
+7. Audit logging of agent activity.
+
+Demo note:
+Code execution should run inside the isolated sandbox with network access disabled.
+Sensitive content should not be written to audit logs.

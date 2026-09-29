@@ -1,0 +1,1 @@
+SovereignAI is a local-first, privacy-respecting AI platform. It runs on your own hardware without cloud dependencies. It includes isolated Docker sandboxing for secure code execution. It features central policy enforcement to prevent unauthorized actions. It supports local OCR and vision capabilities via Ollama.

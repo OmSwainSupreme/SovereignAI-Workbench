@@ -1,0 +1,4 @@
+SovereignAI Workbench is an autonomous local AI agent architecture.
+It runs entirely on-premise without sending private data to external cloud providers.
+Key features include local model routing, deterministic policy enforcement, Docker sandboxing, and audit logging.
+It supports multimodality including vision and OCR with qwen2.5vl:3b, code execution with qwen2.5-coder:3b, and general reasoning with qwen3:4b.
