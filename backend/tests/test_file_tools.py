@@ -997,6 +997,14 @@ class _FakeRouter:
         )
 
 
+class _FakeGateway:
+    """A minimal fake gateway; the direct-answer path is not exercised in
+    these file-tool tests (plans are always non-empty)."""
+
+    async def generate(self, request):
+        return type("FakeGenerationResponse", (), {"content": "fake response"})()
+
+
 class _ScriptedPlanner(Planner):
     """A planner that returns a fixed list of plan steps."""
 
@@ -1047,6 +1055,7 @@ class TestAgentIntegration:
 
         agent = Agent(
             model_router=_FakeRouter(),
+            model_gateway=_FakeGateway(),
             tool_executor=executor,
             planner=_ScriptedPlanner(plan),
             verifier=_PassVerifier(),
@@ -1082,6 +1091,7 @@ class TestAgentIntegration:
 
         agent = Agent(
             model_router=_FakeRouter(),
+            model_gateway=_FakeGateway(),
             tool_executor=executor,
             planner=_ScriptedPlanner(plan),
             verifier=_PassVerifier(),
@@ -1116,6 +1126,7 @@ class TestAgentIntegration:
 
         agent = Agent(
             model_router=_FakeRouter(),
+            model_gateway=_FakeGateway(),
             tool_executor=executor,
             planner=_ScriptedPlanner(plan),
             verifier=_PassVerifier(),
@@ -1124,9 +1135,10 @@ class TestAgentIntegration:
         )
 
         result = await agent.run("read missing")
-        # The agent should still complete (the verifier passes) but record
-        # the tool failure as an observation.
-        assert result.status == AgentStatus.COMPLETE
+        # The tool failed and was never recovered: the run must surface as
+        # FAILED (integration-hardening correction), while still capturing the
+        # failure as an observation for the caller.
+        assert result.status == AgentStatus.FAILED
         assert any(
             "not found" in obs.content.lower() or "FileNotFound" in obs.content
             for obs in result.observations
@@ -1155,6 +1167,7 @@ class TestAgentIntegration:
 
         agent = Agent(
             model_router=_FakeRouter(),
+            model_gateway=_FakeGateway(),
             tool_executor=executor,
             planner=_ScriptedPlanner(plan),
             verifier=_PassVerifier(),
@@ -1163,7 +1176,10 @@ class TestAgentIntegration:
         )
 
         result = await agent.run("read escape")
-        assert result.status == AgentStatus.COMPLETE
+        # A blocked path-traversal read is an unrecovered tool failure: the run
+        # must surface as FAILED (never a false "completed"), with the security
+        # rejection visible in the observations.
+        assert result.status == AgentStatus.FAILED
         # The failure should be in the observations
         assert any("not allowed" in obs.content.lower() for obs in result.observations)
 

@@ -64,6 +64,32 @@ from core.routing import (
     TaskType,
 )
 from core.routing.errors import NoSuitableModelError
+from core.llm.gateway import ModelGateway
+from core.llm.types import GenerationResponse
+
+
+class FakeModelGateway(ModelGateway):
+    """A fake model gateway for testing that returns a fixed response."""
+
+    def __init__(self, response_content: str = "fake response") -> None:
+        self.response_content = response_content
+
+    def _get_provider(self):
+        class FakeProvider:
+            def __init__(self, response_content: str) -> None:
+                self.response_content = response_content
+
+            async def generate(self, request: GenerationRequest) -> GenerationResponse:
+                return GenerationResponse(
+                    content=self.response_content,
+                    model=request.model or "fake-model",
+                )
+
+        return FakeProvider(self.response_content)
+
+    async def generate(self, request: GenerationRequest) -> GenerationResponse:
+        provider = self._get_provider()
+        return await provider.generate(request)
 
 
 # ---------------------------------------------------------------------------
@@ -306,13 +332,20 @@ def router() -> Any:
 
 
 @pytest.fixture
+def model_gateway() -> ModelGateway:
+    return FakeModelGateway()
+
+
+@pytest.fixture
 def agent(
     router: Any,
     tool_executor: ToolExecutor,
     tool_registry: ToolRegistry,
+    model_gateway: ModelGateway,
 ) -> Agent:
     return Agent(
         model_router=router,
+        model_gateway=model_gateway,
         tool_executor=tool_executor,
         planner=SimplePlanner(),
         verifier=SimpleVerifier(),
@@ -380,6 +413,7 @@ class TestAgentMultiStep:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -410,6 +444,7 @@ class TestAgentMultiStep:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -444,6 +479,7 @@ class TestAgentModelRouting:
 
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -453,7 +489,7 @@ class TestAgentModelRouting:
 
         result = await agent.run("Write a function")
 
-        assert result.selected_model == "coding"
+        assert result.selected_model == "qwen3:4b"
         assert len(router.calls) >= 1
 
     @pytest.mark.asyncio
@@ -474,6 +510,7 @@ class TestAgentModelRouting:
 
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -484,7 +521,7 @@ class TestAgentModelRouting:
         result = await agent.run("Integration test task")
 
         assert result.status == AgentStatus.COMPLETE
-        assert result.selected_model in ("general", "coding", "vision")
+        assert result.selected_model in ("qwen3:4b", "qwen2.5-coder:3b", "qwen2.5vl:3b")
 
     @pytest.mark.asyncio
     async def test_routing_failure_raises(self) -> None:
@@ -493,6 +530,7 @@ class TestAgentModelRouting:
         executor = FakeToolExecutor(tool_registry)
         agent = Agent(
             model_router=raising_router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=SimplePlanner(),
             verifier=SimpleVerifier(),
@@ -583,6 +621,7 @@ class TestUnknownToolRejection:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -614,6 +653,7 @@ class TestToolExecution:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -640,6 +680,7 @@ class TestToolExecution:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -674,6 +715,7 @@ class TestObservationHandling:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -702,6 +744,7 @@ class TestVerification:
         plan = Plan(goal="verify test", steps=())
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=verifier,
@@ -725,6 +768,7 @@ class TestVerification:
         plan = Plan(goal="fail verify", steps=())
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=verifier,
@@ -751,6 +795,7 @@ class TestVerification:
         plan = Plan(goal="verifier crash", steps=())
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=verifier,
@@ -787,6 +832,7 @@ class TestIterationLimit:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=AlwaysFailVerifier(),
@@ -824,6 +870,7 @@ class TestMaxToolCalls:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -889,6 +936,7 @@ class TestToolFailure:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -917,6 +965,7 @@ class TestRoutingFailure:
         executor = FakeToolExecutor(tool_registry)
         agent = Agent(
             model_router=raising_router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=SimplePlanner(),
             verifier=SimpleVerifier(),
@@ -945,6 +994,7 @@ class TestTerminalStates:
         plan = Plan(goal="no steps", steps=())
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=FakeVerifier(passed=True),
@@ -965,6 +1015,7 @@ class TestTerminalStates:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=SimplePlanner(),
             verifier=SimpleVerifier(),
@@ -997,6 +1048,7 @@ class TestRepetitiveToolCall:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -1024,6 +1076,7 @@ class TestRepetitiveToolCall:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -1050,6 +1103,7 @@ class TestPlanningFailure:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FailingPlanner(RuntimeError("Planner exploded")),
             verifier=SimpleVerifier(),
@@ -1083,6 +1137,7 @@ class TestDeterminism:
         for _ in range(3):
             agent = Agent(
                 model_router=router,
+                model_gateway=FakeModelGateway(),
                 tool_executor=executor,
                 planner=FakePlanner(plan=plan),
                 verifier=FakeVerifier(passed=True),
@@ -1124,6 +1179,7 @@ class TestSensitiveLogging:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -1201,7 +1257,8 @@ class TestAgentConstruction:
     def test_rejects_missing_router(self) -> None:
         with pytest.raises(TypeError, match="ModelRouter"):
             Agent(
-                model_router=None,  # type: ignore[arg-type]
+                model_router=None,  # type: ignore[arg-type],
+                model_gateway=FakeModelGateway(),
                 tool_executor=FakeToolExecutor(DefaultToolRegistry()),
                 planner=SimplePlanner(),
                 verifier=SimpleVerifier(),
@@ -1211,6 +1268,7 @@ class TestAgentConstruction:
         with pytest.raises(TypeError, match="ToolExecutor"):
             Agent(
                 model_router=FakeRouter(),
+                model_gateway=FakeModelGateway(),
                 tool_executor=None,  # type: ignore[arg-type]
                 planner=SimplePlanner(),
                 verifier=SimpleVerifier(),
@@ -1220,6 +1278,7 @@ class TestAgentConstruction:
         with pytest.raises(TypeError, match="Planner"):
             Agent(
                 model_router=FakeRouter(),
+                model_gateway=FakeModelGateway(),
                 tool_executor=FakeToolExecutor(DefaultToolRegistry()),
                 planner=None,  # type: ignore[arg-type]
                 verifier=SimpleVerifier(),
@@ -1229,6 +1288,7 @@ class TestAgentConstruction:
         with pytest.raises(TypeError, match="Verifier"):
             Agent(
                 model_router=FakeRouter(),
+                model_gateway=FakeModelGateway(),
                 tool_executor=FakeToolExecutor(DefaultToolRegistry()),
                 planner=SimplePlanner(),
                 verifier=None,  # type: ignore[arg-type]
@@ -1276,6 +1336,7 @@ class TestNoUncontrolledLoops:
         router = FakeRouter(model_name="general")
         agent = Agent(
             model_router=router,
+            model_gateway=FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(plan=plan),
             verifier=AlwaysFailVerifier(),

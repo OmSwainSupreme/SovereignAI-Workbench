@@ -148,6 +148,23 @@ def _fake_router():
     return router
 
 
+class _FakeModelGateway:
+    """A fake model gateway that returns a fixed response.
+
+    Satisfies the :class:`Agent` constructor's required ``model_gateway``.
+    These document-tool tests use non-empty plans, so ``generate`` is never
+    actually called.
+    """
+
+    async def generate(self, request):
+        from core.llm.types import GenerationResponse
+
+        return GenerationResponse(
+            content="fake response",
+            model=request.model or "fake-model",
+        )
+
+
 # ===========================================================================
 # TestDocumentToolDefinition
 # ===========================================================================
@@ -789,6 +806,7 @@ class TestAgentIntegration:
         executor = SyncToolExecutor(tool_registry)
         agent = Agent(
             model_router=_fake_router(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(),
             verifier=SimpleVerifier(),
@@ -842,6 +860,7 @@ class TestAgentIntegration:
         executor = SyncToolExecutor(tool_registry)
         agent = Agent(
             model_router=_fake_router(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=FakePlanner(),
             verifier=SimpleVerifier(),

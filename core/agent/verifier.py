@@ -77,6 +77,31 @@ class SimpleVerifier(Verifier):
                 suggestions=("Add tools that return observations.",),
             )
 
+        has_valid_content = any(
+            getattr(m, "role", None) in ("assistant", "agent")
+            and bool(getattr(m, "content", None) and str(getattr(m, "content", "")).strip())
+            for m in state.messages
+        )
+        if has_valid_content:
+            return VerificationResult(
+                passed=True,
+                reason="Agent produced a direct response.",
+            )
+
+        # If model produced an assistant message with only thinking or empty content, fail verification
+        has_thinking_only = any(
+            getattr(m, "role", None) in ("assistant", "agent")
+            and bool(getattr(m, "thinking", None))
+            and not bool(getattr(m, "content", None) and str(getattr(m, "content", "")).strip())
+            for m in state.messages
+        )
+        if has_thinking_only:
+            return VerificationResult(
+                passed=False,
+                reason="Agent produced thinking but no final answer was generated.",
+                suggestions=("Ensure model generates a final response after thinking.",),
+            )
+
         if not state.artifacts and not state.observations and state.iteration == 0:
             return VerificationResult(
                 passed=False,

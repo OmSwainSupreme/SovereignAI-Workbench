@@ -24,7 +24,8 @@ import logging
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from core.agent.types import ToolCall
+if False:  # prevent circular import; ToolCall used only as annotation
+    from core.agent.types import ToolCall  # lgtm [py/redundant-control-flow]
 
 logger = logging.getLogger("sovereign-ai.security.policy")
 
@@ -133,6 +134,10 @@ class PolicyEngine:
             # Sandbox code execution (Phase 5D) — DANGEROUS, denied by default.
             "code_execution": {
                 "execute_code": DENY,
+            },
+            # Audit log / activity tools.
+            "audit": {
+                "read_audit_log": ALLOW,
             },
             # Anything not explicitly listed above is denied.
             "default": DENY,
@@ -276,6 +281,8 @@ class PolicyEngine:
         # vision/OCR tools (Phase 5C)
         "ocr_image": ("vision", "ocr_image"),
         "analyze_image": ("vision", "analyze_image"),
+        # audit tools
+        "read_audit_log": ("audit", "read_audit_log"),
     }
 
     def _extract_capability_action(self, tool_call: ToolCall) -> tuple[str, str]:
@@ -292,6 +299,8 @@ class PolicyEngine:
             return mapped
 
         lowered = tool_name.lower()
+        if "audit" in lowered:
+            return ("audit", tool_name)
         if any(k in lowered for k in ("file", "read", "write", "list")):
             return ("file_system", tool_name)
         if "document" in lowered:

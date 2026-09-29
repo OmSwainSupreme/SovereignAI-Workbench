@@ -152,6 +152,7 @@ def make_agent(
     verifier = verifier or _PassingVerifier()
     agent = Agent(
         model_router=router,  # type: ignore[arg-type]
+        model_gateway=_FakeModelGateway(),
         tool_executor=executor,
         planner=planner,
         verifier=verifier,
@@ -159,6 +160,25 @@ def make_agent(
         tool_registry=registry,
     )
     return agent, registry
+
+
+class _FakeModelGateway:
+    """A fake model gateway that returns a fixed response.
+
+    Satisfies the :class:`Agent` constructor's required ``model_gateway``.
+    Most end-to-end tests use non-empty plans; those that hit the empty-plan
+    direct-answer path get a fixed response.
+    """
+
+    async def generate(self, request) -> Any:
+        return type(
+            "GenerationResponse",
+            (),
+            {
+                "content": "fake response",
+                "model": request.model or "fake-model",
+            },
+        )()
 
 
 class _FixedPlanner(Planner):
@@ -672,9 +692,11 @@ class TestToolProviderFailure:
         agent, _ = make_agent(plan=plan, executor=executor)
         result = asyncio.run(agent.run("Read the file missing.txt."))
 
-        # The tool failed but the agent reports a structured, SAFE result — it
-        # does NOT raise, and the failure is captured as an observation.
-        assert result.status == AgentStatus.COMPLETE
+        # The tool failed and was never recovered: the run must surface as
+        # FAILED, not a false "completed" (integration-hardening correction).
+        # The result is still structured and SAFE — it does NOT raise to the
+        # caller, and the failure is captured as an observation.
+        assert result.status == AgentStatus.FAILED
         assert len(executor.calls) == 1
         assert result.tool_calls[0].tool_name == "read_file"
         assert result.observations and "[Tool error]" in result.observations[-1].content

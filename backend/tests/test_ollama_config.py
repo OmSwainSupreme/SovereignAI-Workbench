@@ -50,7 +50,7 @@ class TestOllamaConfigDataclass:
         cfg = OllamaConfig()
         assert cfg.base_url == "http://127.0.0.1:11434"
         assert cfg.default_model == ""
-        assert cfg.request_timeout_seconds == 120
+        assert cfg.request_timeout_seconds == 1800
 
     def test_explicit_values(self) -> None:
         cfg = OllamaConfig(
@@ -79,7 +79,7 @@ class TestSettingsDefaults:
         s = Settings()
         assert s.llm_ollama_base_url == "http://127.0.0.1:11434"
         assert s.llm_ollama_default_model == ""
-        assert s.llm_ollama_request_timeout_seconds == 120
+        assert s.llm_ollama_request_timeout_seconds == 1800
 
     def test_llm_provider_default(self) -> None:
         s = Settings()
@@ -90,7 +90,7 @@ class TestSettingsDefaults:
         assert s.llm.provider == "ollama"
         assert s.llm.ollama.base_url == "http://127.0.0.1:11434"
         assert s.llm.ollama.default_model == ""
-        assert s.llm.ollama.request_timeout_seconds == 120
+        assert s.llm.ollama.request_timeout_seconds == 1800
 
 
 class TestSettingsEnvLoading:

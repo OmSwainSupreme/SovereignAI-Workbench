@@ -75,6 +75,7 @@ from core.routing.registry import (
     ModelRegistry,
     load_default_registry,
 )
+from core.llm.types import GenerationResponse
 from core.sandbox import (
     EXECUTE_CODE_TOOL,
     CodeToolExecutor,
@@ -89,6 +90,21 @@ from core.sandbox import (
     _NullSandbox,
     register_code_tools,
 )
+
+
+class _FakeModelGateway:
+    """A fake model gateway that returns a fixed response.
+
+    Only used to satisfy the :class:`Agent` constructor's ``model_gateway``
+    requirement; most agent runs here use non-empty plans so ``generate`` is
+    never actually called.
+    """
+
+    async def generate(self, request) -> GenerationResponse:
+        return GenerationResponse(
+            content="fake response",
+            model=request.model or "fake-model",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +316,7 @@ class TestAgentExecuteCodeRouting:
         )
         agent = Agent(
             model_router=router,
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -310,7 +327,7 @@ class TestAgentExecuteCodeRouting:
         result = asyncio.run(agent.run("Calculate the first 20 Fibonacci numbers"))
 
         assert result.status == AgentStatus.COMPLETE
-        assert result.selected_model == "coding"
+        assert result.selected_model == "qwen2.5-coder:3b"
         # The router was called at least once (route_model phase).
         assert len(router.calls) >= 1
 
@@ -324,6 +341,7 @@ class TestAgentExecuteCodeRouting:
         planner = RecordingPlanner(plan=Plan(goal="x", steps=()))
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=planner,
             verifier=SimpleVerifier(),
@@ -378,6 +396,7 @@ class TestAgentExecuteCodeRouting:
         )
         agent = Agent(
             model_router=router,
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -387,8 +406,8 @@ class TestAgentExecuteCodeRouting:
 
         result = asyncio.run(agent.run("Write a function"))
 
-        # The router must have selected the coding model.
-        assert result.selected_model == "coding"
+        # The router must have selected the coding model (provider model id).
+        assert result.selected_model == "qwen2.5-coder:3b"
         decision = router.route(
             RoutingRequest(
                 task_type=TaskType.CODING,
@@ -452,6 +471,7 @@ class TestAgentExecuteCodeEndToEnd:
         router = FakeRouter(model_name="coding")
         agent = Agent(
             model_router=router,
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -470,7 +490,7 @@ class TestAgentExecuteCodeEndToEnd:
         # The agent planned, routed, called the tool, observed, verified,
         # and completed — at least the first 4 phases are recorded in
         # the final state.
-        assert result.selected_model == "coding"
+        assert result.selected_model == "qwen2.5-coder:3b"
 
         # Exactly one tool call was made.
         assert len(result.tool_calls) == 1
@@ -528,6 +548,7 @@ class TestAgentExecuteCodeEndToEnd:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -563,6 +584,7 @@ class TestAgentExecuteCodeEndToEnd:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -615,6 +637,7 @@ class TestAgentExecuteCodeFailureModes:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -658,6 +681,7 @@ class TestAgentExecuteCodeFailureModes:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -700,6 +724,7 @@ class TestAgentExecuteCodeFailureModes:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -730,6 +755,7 @@ class TestAgentExecuteCodeFailureModes:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -769,6 +795,7 @@ class TestAgentExecuteCodeFailureModes:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -777,9 +804,10 @@ class TestAgentExecuteCodeFailureModes:
         )
         result = asyncio.run(agent.run("Trigger sandbox failure"))
 
-        # The agent should still complete (a single failure becomes an
-        # observation; the verifier passes on having made progress).
-        assert result.status == AgentStatus.COMPLETE
+        # A single unrecovered sandbox failure becomes an observation AND
+        # surfaces as FAILED (never a false "completed"; the tool error is
+        # still visible so the caller can distinguish it from a crash).
+        assert result.status == AgentStatus.FAILED
         # The observation should reflect the tool error, not a crash.
         assert len(result.observations) == 1
         assert "[Tool error]" in result.observations[0].content
@@ -807,6 +835,7 @@ class TestAgentExecuteCodeFailureModes:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -849,6 +878,7 @@ class TestAgentExecuteCodeFailureModes:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -904,6 +934,7 @@ class TestAgentExecuteCodeSecurity:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -963,6 +994,7 @@ class TestAgentExecuteCodeSecurity:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -1015,6 +1047,7 @@ class TestAgentExecuteCodeSensitiveLogging:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -1053,6 +1086,7 @@ class TestAgentExecuteCodeSensitiveLogging:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -1098,6 +1132,7 @@ class TestAgentExecuteCodeSensitiveLogging:
         )
         agent = Agent(
             model_router=FakeRouter(),
+            model_gateway=_FakeModelGateway(),
             tool_executor=code_executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -1177,6 +1212,7 @@ class TestAgentExecuteCodeDockerIntegration:
         )
         agent = Agent(
             model_router=FakeRouter(model_name="coding"),
+            model_gateway=_FakeModelGateway(),
             tool_executor=executor,
             planner=RecordingPlanner(plan=plan),
             verifier=SimpleVerifier(),
@@ -1192,7 +1228,7 @@ class TestAgentExecuteCodeDockerIntegration:
         )
 
         assert result.status == AgentStatus.COMPLETE
-        assert result.selected_model == "coding"
+        assert result.selected_model == "qwen2.5-coder:3b"
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].tool_name == "execute_code"
         assert len(result.observations) == 1

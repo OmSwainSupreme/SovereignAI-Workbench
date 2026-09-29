@@ -57,7 +57,7 @@ class OllamaConfig:
         self,
         base_url: str = "http://127.0.0.1:11434",
         default_model: str = "",
-        request_timeout_seconds: int = 120,
+        request_timeout_seconds: int = 1800,
     ) -> None:
         self.base_url = _validate_loopback(base_url)
         self.default_model = default_model
@@ -94,6 +94,27 @@ def _validate_loopback(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+class StreamChunk(str):
+    """A streaming text chunk that preserves thinking metadata without breaking str consumers."""
+
+    content: str
+    thinking: str
+    is_thinking: bool
+
+    def __new__(
+        cls,
+        content: str = "",
+        thinking: str = "",
+        is_thinking: bool = False,
+    ) -> StreamChunk:
+        text = thinking if is_thinking else content
+        obj = super().__new__(cls, text)
+        obj.content = content
+        obj.thinking = thinking
+        obj.is_thinking = is_thinking
+        return obj
+
+
 class OllamaProvider(BaseProvider):
     """Model provider backed by a local Ollama server.
 
@@ -116,18 +137,32 @@ class OllamaProvider(BaseProvider):
         *,
         base_url: str = "http://127.0.0.1:11434",
         default_model: str = "",
-        request_timeout_seconds: int = 120,
+        request_timeout_seconds: int = 1800,
     ) -> None:
         self._config = OllamaConfig(
             base_url=base_url,
             default_model=default_model,
             request_timeout_seconds=request_timeout_seconds,
         )
+        # Use separate connect/read/write timeouts.
+        # For streaming, httpx applies the `read` timeout between successive
+        # chunks — NOT to the total response duration. On CPU-only hardware
+        # qwen3 generates at ~3-5 tok/s and can spend 60-120s in the thinking
+        # phase before the first content token. A flat 120s timeout would kill
+        # the stream mid-generation. We use a short connect timeout (fast-fail
+        # if Ollama is down) and a generous per-chunk read timeout.
+        _read_timeout = float(max(self._config.request_timeout_seconds, 1800))
         self._client: httpx.AsyncClient = httpx.AsyncClient(
-            timeout=httpx.Timeout(self._config.request_timeout_seconds),
+            timeout=httpx.Timeout(
+                connect=10.0,
+                read=_read_timeout,
+                write=30.0,
+                pool=10.0,
+            ),
             limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
         )
         self.default_model = self._config.default_model or None
+        self.last_metadata: dict[str, Any] = {}
 
     async def close(self) -> None:
         """Close the underlying HTTP client. Call this at application shutdown."""
@@ -213,6 +248,65 @@ class OllamaProvider(BaseProvider):
                 f"Ollama returned non-JSON response: {exc}. Body: {response.text[:200]}"
             ) from exc
 
+    async def _get(
+        self,
+        path: str,
+        *,
+        timeout: Optional[float] = None,
+    ) -> dict[str, Any]:
+        """GET from ``path`` and return the parsed JSON body."""
+        _logger.debug("GET %s", path)
+        try:
+            response = await self._client.get(
+                self._url(path),
+                timeout=timeout,
+            )
+        except httpx.ConnectError as exc:
+            raise ProviderUnavailableError(
+                f"Could not connect to Ollama at {self._config.base_url}: {exc}"
+            ) from exc
+        except httpx.ReadTimeout as exc:
+            raise ProviderTimeoutError(
+                f"Ollama request to {path} timed out after "
+                f"{self._config.request_timeout_seconds}s"
+            ) from exc
+        except httpx.ConnectTimeout as exc:
+            raise ProviderUnavailableError(
+                f"Connection to Ollama timed out: {exc}"
+            ) from exc
+        except httpx.PoolTimeout as exc:
+            raise ProviderError(
+                f"Ollama request failed (pool exhausted): {exc}"
+            ) from exc
+        except httpx.WriteTimeout as exc:
+            raise ProviderError(
+                f"Ollama request failed (write timeout): {exc}"
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise ProviderTimeoutError(
+                f"Ollama request timed out: {exc}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError(
+                f"Ollama request failed: {exc}"
+            ) from exc
+
+        if response.status_code >= 500:
+            raise ProviderError(
+                f"Ollama server error {response.status_code}: {response.text[:200]}"
+            )
+        if not response.is_success:
+            raise ProviderResponseError(
+                f"Ollama returned HTTP {response.status_code}: {response.text[:200]}"
+            )
+
+        try:
+            return response.json()
+        except json.JSONDecodeError as exc:
+            raise ProviderResponseError(
+                f"Ollama returned non-JSON response: {exc}. Body: {response.text[:200]}"
+            ) from exc
+
     async def generate(self, request: GenerationRequest) -> GenerationResponse:
         """Generate a single response using the Ollama /api/chat endpoint."""
         model = request.model or self.default_model
@@ -226,14 +320,25 @@ class OllamaProvider(BaseProvider):
             "messages": [_message_to_dict(m) for m in request.messages],
             "stream": False,
         }
+        keep_alive = getattr(request, "keep_alive", None) or "60m"
+        payload["keep_alive"] = keep_alive
+
+        options = payload.setdefault("options", {})
+        num_ctx = getattr(request, "num_ctx", None)
+        options.setdefault("num_ctx", num_ctx if num_ctx is not None else 16384)
         if request.temperature is not None:
-            payload.setdefault("options", {})["temperature"] = request.temperature
+            options["temperature"] = request.temperature
         if request.top_p is not None:
-            payload.setdefault("options", {})["top_p"] = request.top_p
+            options["top_p"] = request.top_p
         if request.max_tokens is not None:
-            payload.setdefault("options", {})["num_predict"] = request.max_tokens
+            options["num_predict"] = request.max_tokens
         if request.stop:
-            payload.setdefault("options", {})["stop"] = request.stop
+            options["stop"] = request.stop
+        # Control thinking mode for models like qwen3 that support it.
+        # Set at the top level (not inside options) per Ollama API spec.
+        think = getattr(request, "think", None)
+        if think is not None:
+            payload["think"] = think
 
         start = time.monotonic()
         try:
@@ -246,8 +351,12 @@ class OllamaProvider(BaseProvider):
                 latency_ms,
             )
 
+        raw_content = _get_in(data, ("message", "content"), "")
+        if not raw_content and _get_in(data, ("message", "thinking"), ""):
+            raw_content = _get_in(data, ("message", "thinking"), "")
+
         return GenerationResponse(
-            content=_get_in(data, ("message", "content"), ""),
+            content=raw_content,
             model=data.get("model", model),
             raw=data,
             finish_reason=data.get("done_reason"),
@@ -268,14 +377,25 @@ class OllamaProvider(BaseProvider):
             "messages": [_message_to_dict(m) for m in request.messages],
             "stream": True,
         }
+        keep_alive = getattr(request, "keep_alive", None) or "60m"
+        payload["keep_alive"] = keep_alive
+
+        stream_options = payload.setdefault("options", {})
+        num_ctx = getattr(request, "num_ctx", None)
+        stream_options.setdefault("num_ctx", num_ctx if num_ctx is not None else 16384)
         if request.temperature is not None:
-            payload.setdefault("options", {})["temperature"] = request.temperature
+            stream_options["temperature"] = request.temperature
         if request.top_p is not None:
-            payload.setdefault("options", {})["top_p"] = request.top_p
+            stream_options["top_p"] = request.top_p
         if request.max_tokens is not None:
-            payload.setdefault("options", {})["num_predict"] = request.max_tokens
+            stream_options["num_predict"] = request.max_tokens
         if request.stop:
-            payload.setdefault("options", {})["stop"] = request.stop
+            stream_options["stop"] = request.stop
+        # Control thinking mode for models like qwen3 that support it.
+        # Set at the top level (not inside options) per Ollama API spec.
+        think = getattr(request, "think", None)
+        if think is not None:
+            payload["think"] = think
 
         try:
             async with self._client.stream(
@@ -304,8 +424,17 @@ class OllamaProvider(BaseProvider):
                         chunk = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    content = chunk.get("message", {}).get("content", "")
-                    yield content
+                    if chunk.get("error"):
+                        raise ProviderError(f"Ollama stream error: {chunk['error']}")
+                    msg = chunk.get("message", {})
+                    thinking_token = msg.get("thinking", "")
+                    content_token = msg.get("content", "") or chunk.get("response", "")
+                    if chunk.get("done"):
+                        self.last_metadata = chunk
+                    if thinking_token:
+                        yield StreamChunk(thinking=thinking_token, is_thinking=True)
+                    if content_token:
+                        yield StreamChunk(content=content_token, is_thinking=False)
         except httpx.ConnectError as exc:
             raise ProviderUnavailableError(
                 f"Could not connect to Ollama at {self._config.base_url}: {exc}"
@@ -323,7 +452,7 @@ class OllamaProvider(BaseProvider):
     async def health(self) -> ProviderHealth:
         """Check whether the Ollama server is reachable via /api/tags."""
         try:
-            data = await self._post("/api/tags", {})
+            data = await self._get("/api/tags")
             models_raw: list[dict] = data.get("models") or []
             models = [
                 ModelInfo(
@@ -367,7 +496,7 @@ class OllamaProvider(BaseProvider):
 
     async def list_models(self) -> list[ModelInfo]:
         """Return the list of models available on the Ollama server."""
-        data = await self._post("/api/tags", {})
+        data = await self._get("/api/tags")
         models_raw: list[dict] = data.get("models") or []
         return [
             ModelInfo(

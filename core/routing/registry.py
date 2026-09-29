@@ -303,9 +303,9 @@ def _builtin_default_registry() -> ModelRegistry:
             input_modalities=frozenset({Modality.TEXT}),
             output_modalities=frozenset({Modality.TEXT}),
             enabled=True,
-            priority=10,
+            priority=25,
             context_length=32768,
-            description="General-purpose chat and reasoning model.",
+            description="General-purpose chat, reasoning, and document analysis model.",
         )
     )
     registry.register(
@@ -313,13 +313,13 @@ def _builtin_default_registry() -> ModelRegistry:
             logical_name="coding",
             provider="ollama",
             provider_model="qwen2.5-coder:3b",
-            capabilities=frozenset({Capability.CODING, Capability.GENERAL}),
+            capabilities=frozenset({Capability.CODING}),
             input_modalities=frozenset({Modality.TEXT}),
             output_modalities=frozenset({Modality.TEXT}),
             enabled=True,
             priority=20,
             context_length=32768,
-            description="Code generation and refactoring model.",
+            description="Code generation, explanation, and refactoring.",
         )
     )
     registry.register(
@@ -327,7 +327,7 @@ def _builtin_default_registry() -> ModelRegistry:
             logical_name="vision",
             provider="ollama",
             provider_model="qwen2.5vl:3b",
-            capabilities=frozenset({Capability.VISION, Capability.GENERAL}),
+            capabilities=frozenset({Capability.VISION}),
             input_modalities=frozenset({Modality.TEXT, Modality.IMAGE}),
             output_modalities=frozenset({Modality.TEXT}),
             enabled=True,

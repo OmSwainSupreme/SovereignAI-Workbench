@@ -10,7 +10,8 @@ conservative — they do not require an LLM.
 from __future__ import annotations
 
 import logging
-from typing import Sequence
+import re
+from typing import Optional, Sequence
 
 from core.agent.errors import PlanningFailureError
 from core.agent.interfaces import Planner
@@ -37,12 +38,15 @@ class SimplePlanner(Planner):
     TOOL_KEYWORDS = {
         "read": "read_file",
         "file": "read_file",
+        "document": "create_document",
+        "docx": "create_document",
+        "report": "create_document",
         "search": "search_knowledge",
         "find": "search_knowledge",
         "knowledge": "search_knowledge",
-        "create": "create_artifact",
-        "write": "create_artifact",
-        "artifact": "create_artifact",
+        "create document": "create_document",
+        "create docx": "create_document",
+        "artifact": None,
         "code": "execute_code",
         "calculate": "execute_code",
         "compute": "execute_code",
@@ -77,9 +81,123 @@ class SimplePlanner(Planner):
     ) -> Plan:
         """Produce a plan for the task.
 
-        The plan is always either a single tool step or an empty plan (no tools).
+        The plan is always either tool steps or an empty plan (no tools).
+        When the state carries validated attachment names and a read/summary is
+        requested, a ``read_file`` step is planned per attachment so the tool
+        receives the correct workspace-relative ``path``.
         """
         task_lower = task.lower()
+
+        # Attachments in the task state are authoritative:
+        # If an image attachment is provided, plan vision analysis.
+        # If a document attachment is provided, plan read_file.
+        if state.attachments:
+            image_exts = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff")
+            image_attachments = [a for a in state.attachments if a.lower().endswith(image_exts)]
+            doc_attachments = [a for a in state.attachments if not a.lower().endswith(image_exts)]
+
+            # 1. Image attachments -> Vision tool ONLY for image files
+            if image_attachments and ("analyze_image" in available_tools or "ocr_image" in available_tools):
+                is_ocr = any(k in task_lower for k in ("ocr", "transcribe", "extract text", "read text"))
+                if is_ocr and "ocr_image" in available_tools:
+                    vision_tool = "ocr_image"
+                else:
+                    vision_tool = "analyze_image" if "analyze_image" in available_tools else "ocr_image"
+                steps = tuple(
+                    PlanStep(
+                        step_id=f"step-{i}",
+                        description=f"Analyze attached image {name}",
+                        tool_name=vision_tool,
+                        inputs={"path": name, "prompt": task} if vision_tool == "analyze_image" else {"path": name},
+                        reason=f"Task references attached image {name!r}",
+                    )
+                    for i, name in enumerate(image_attachments)
+                )
+                _logger.info(
+                    "planner: %s planned for %d image attachment(s)",
+                    vision_tool,
+                    len(steps),
+                )
+                return Plan(
+                    goal=task,
+                    steps=steps,
+                    reasoning="Task references attached image; planned vision analysis.",
+                )
+
+            # 2. Document attachments -> read_file ONLY for non-image files
+            if doc_attachments and "read_file" in available_tools:
+                steps = tuple(
+                    PlanStep(
+                        step_id=f"step-{i}",
+                        description=f"Read attached file {name}",
+                        tool_name="read_file",
+                        inputs={"path": name},
+                        reason=f"Task references attached file {name!r}",
+                    )
+                    for i, name in enumerate(doc_attachments)
+                )
+                _logger.info(
+                    "planner: read_file planned for %d document attachment(s)",
+                    len(steps),
+                )
+                return Plan(
+                    goal=task,
+                    steps=steps,
+                    reasoning=(
+                        "Task references attached document; planned read_file per attachment."
+                    ),
+                )
+
+        # Check if task text references an image file directly
+        image_exts = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff")
+        image_match = re.search(
+            r'["\']?([a-zA-Z0-9_\-\.\/\\]+\.(?:png|jpg|jpeg|webp|bmp|tiff))["\']?',
+            task,
+            re.IGNORECASE,
+        )
+        if image_match and ("analyze_image" in available_tools or "ocr_image" in available_tools):
+            img_path = image_match.group(1).strip()
+            is_ocr = any(k in task_lower for k in ("ocr", "transcribe", "extract text", "read text"))
+            if is_ocr and "ocr_image" in available_tools:
+                vision_tool = "ocr_image"
+            else:
+                vision_tool = "analyze_image" if "analyze_image" in available_tools else "ocr_image"
+            step = PlanStep(
+                step_id="step-0",
+                description=f"Analyze image {img_path}",
+                tool_name=vision_tool,
+                inputs={"path": img_path, "prompt": task} if vision_tool == "analyze_image" else {"path": img_path},
+                reason=f"Task references image {img_path!r}",
+            )
+            _logger.info("planner: %s planned for prompt-referenced image %s", vision_tool, img_path)
+            return Plan(
+                goal=task,
+                steps=(step,),
+                reasoning="Task references image; planned vision analysis.",
+            )
+
+        # Check if task text references a document or code file directly
+        doc_match = re.search(
+            r'["\']?([a-zA-Z0-9_\-\.\/\\]+\.(?:txt|md|json|csv|py|cpp|c|h|log|yaml|yml|xml|html|js|ts))["\']?',
+            task,
+            re.IGNORECASE,
+        )
+        if doc_match and "read_file" in available_tools:
+            doc_path = doc_match.group(1).strip()
+            step = PlanStep(
+                step_id="step-0",
+                description=f"Read file {doc_path}",
+                tool_name="read_file",
+                inputs={"path": doc_path},
+                reason=f"Task references document file {doc_path!r}",
+            )
+            _logger.info("planner: read_file planned for prompt-referenced file %s", doc_path)
+            return Plan(
+                goal=task,
+                steps=(step,),
+                reasoning="Task references document file; planned read_file.",
+            )
+
         step: PlanStep | None = None
 
         for keyword, tool_name in self._keywords.items():
@@ -104,9 +222,15 @@ class SimplePlanner(Planner):
                     )
 
                 # Determine inputs for the tool based on the task.
-                # For the initial implementation, we pass the whole task as a single argument.
-                # Future planners can do better extraction.
-                inputs = self._extract_inputs(task, tool_name)
+                inputs = self._extract_inputs(task, tool_name, state=state)
+                if tool_name == "read_file" and not inputs.get("path"):
+                    _logger.warning("planner: read_file requested without path; falling back to direct answer")
+                    return Plan(
+                        goal=task,
+                        steps=(),
+                        reasoning="No file path or attachment was specified for read_file.",
+                    )
+
                 step = PlanStep(
                     step_id="step-0",
                     description=f"Call {tool_name} to help with task",
@@ -126,17 +250,16 @@ class SimplePlanner(Planner):
             reasoning=f"Task contains keyword, planned single tool call: {step.tool_name}",
         )
 
-    def _extract_inputs(self, task: str, tool_name: str) -> dict[str, object]:
-        """Extract arguments for the tool from the task string.
-
-        The initial implementation is conservative: it just passes the task
-        itself as the primary argument. Subclasses or future planners can
-        do better extraction with an LLM or regex.
-        """
+    def _extract_inputs(
+        self, task: str, tool_name: str, state: Optional[AgentState] = None
+    ) -> dict[str, object]:
+        """Extract arguments for the tool from the task string."""
         if tool_name == "read_file":
-            # Try to extract a filename from the task.
-            import re
-
+            if state is not None and state.attachments:
+                image_exts = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff")
+                doc_atts = [a for a in state.attachments if not a.lower().endswith(image_exts)]
+                if doc_atts:
+                    return {"path": doc_atts[0], "task": task}
             match = re.search(r'["\'](.+?)["\']|([^\s]+(?:\.[a-zA-Z0-9]+)+)', task)
             if match:
                 filename = match.group(1) or match.group(2)
@@ -144,21 +267,21 @@ class SimplePlanner(Planner):
             return {"task": task}
 
         if tool_name == "search_knowledge":
-            # Use the whole task as the query.
             return {"query": task}
+
+        if tool_name == "create_document":
+            match = re.search(r'["\'](.+?\.docx)["\']|([^\s]+\.docx)', task, re.IGNORECASE)
+            path = "document.docx"
+            if match:
+                path = match.group(1) or match.group(2)
+            title_match = re.search(r'title\s+["\']?([^"\'\n,]+)["\']?', task, re.IGNORECASE)
+            title = title_match.group(1).strip() if title_match else "Generated Document"
+            return {"path": path, "title": title, "content": task}
 
         if tool_name == "create_artifact":
             return {"content": task, "artifact_type": "text"}
 
         if tool_name == "execute_code":
-            # The execute_code tool takes a `code` field. The SimplePlanner
-            # has no LLM; the code itself must come from the task or from
-            # a heuristic. We pass the task as the `task` field (so the
-            # tool's callable is exercised with structured inputs) and
-            # leave `code` empty unless the task contains a clearly-delimited
-            # code block. Tests that want deterministic behaviour inject
-            # the code via the plan step's ``inputs`` directly; this branch
-            # is for the keyword-matching path.
             return {"code": "", "language": "python", "task": task}
 
         # Default: pass the whole task.
@@ -170,11 +293,7 @@ class SimplePlanner(Planner):
         step_index: int,
         state: AgentState,
     ) -> Plan:
-        """Update the plan after a step has been executed.
-
-        The default implementation removes the completed step from the plan.
-        More sophisticated planners might add new steps based on observations.
-        """
+        """Update the plan after a step has been executed."""
         if step_index >= len(plan.steps):
             return plan
 
